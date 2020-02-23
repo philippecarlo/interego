@@ -1,0 +1,381 @@
+<html>
+	<head>
+		<link rel="stylesheet" href="./fa/css/font-awesome.min.css">
+
+		<script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/1.8.3/jquery.min.js"></script>
+		<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.13.5/xlsx.full.min.js"></script>
+		<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.13.5/jszip.js"></script>
+		<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/seedrandom/2.3.10/seedrandom.min.js"></script>
+		<script type="text/javascript">
+		
+		var excelRows = null;
+		
+		$( document ).ready(function() {
+
+			$("body").on("click", "#upload", function () {
+				console.log("Loading excel document ...")
+				//Reference the FileUpload element.
+				var fileUpload = $("#fileUpload")[0];
+		 
+				//Validate whether File is valid Excel file.
+				var regex = /^([a-zA-Z0-9\s_\\.\-:])+(.xls|.xlsx)$/;
+				if (regex.test(fileUpload.value.toLowerCase())) {
+					if (typeof (FileReader) != "undefined") {
+						var reader = new FileReader();
+		 
+						//For Browsers other than IE.
+						if (reader.readAsBinaryString) {
+							reader.onload = function (e) {
+								ProcessExcel(e.target.result);
+							};
+							reader.readAsBinaryString(fileUpload.files[0]);
+						} else {
+							//For IE Browser.
+							reader.onload = function (e) {
+								var data = "";
+								var bytes = new Uint8Array(e.target.result);
+								for (var i = 0; i < bytes.byteLength; i++) {
+									data += String.fromCharCode(bytes[i]);
+								}
+								ProcessExcel(data);
+							};
+							reader.readAsArrayBuffer(fileUpload.files[0]);
+						}
+					} else {
+						alert("This browser does not support HTML5.");
+					}
+				} else {
+					alert("Please upload a valid Excel file.");
+				}
+			});
+			
+			function ProcessExcel(data) {
+				//Read the Excel File data.
+				var workbook = XLSX.read(data, {
+					type: 'binary'
+				});
+		 
+				//Fetch the name of First Sheet.
+				var firstSheet = workbook.SheetNames[0];
+		 
+				//Read all rows from First Sheet into an JSON array.
+				excelRows = XLSX.utils.sheet_to_row_object_array(workbook.Sheets[firstSheet]);
+				$("#result").html("" + excelRows.length + " woorden geladen");
+			
+				//Create a HTML Table element.
+				var table = $('<table cellspacing="0" cellpadding="0"/>');
+				table[0].border = "1";
+		 
+				//Add the header row.
+				var row = $(table[0].insertRow(-1));
+		 
+			   //Add the header cells.
+				var headerCell = $("<th />");
+				headerCell.html("Grondwoord");
+				row.append(headerCell);
+		 
+				var headerCell = $("<th />");
+				headerCell.html("Genitief");
+				row.append(headerCell);
+		 
+				var headerCell = $("<th />");
+				headerCell.html("Nederlands");
+				row.append(headerCell);
+		 
+				//Add the data rows from Excel file.
+				for (var i = 0; i < excelRows.length; i++) {
+					//Add the data row.
+					var row = $(table[0].insertRow(-1));
+		 
+					//Add the data cells.
+					var cell = $("<td />");
+					cell.html(excelRows[i].Grondwoord);
+					row.append(cell);
+		 
+					cell = $("<td />");
+					cell.html(excelRows[i].Genitief);
+					row.append(cell);
+		 
+					cell = $("<td />");
+					cell.html(excelRows[i].Nederlands);
+					row.append(cell);
+				}
+		 
+				var dvExcel = $("#dvExcel");
+				dvExcel.html("");
+				dvExcel.append(table);
+				
+				$("#fileLoader").removeClass("active");
+				$("#quizPane").addClass("active");
+			};
+		
+			$("body").on("click", "#search", function() {
+				var terms = $("#search-terms").val();
+				$("#dvExcel table tr").show();
+				$("#dvExcel table tr").each(function (index, tr) {
+					if (index > 0) {
+						var result = $(tr).html().search(terms);
+						if (result < 0) {
+							$(tr).hide();
+						}
+					}
+				});
+			});
+
+			$("body").on("click", "#clear", function() {
+				$("#search-terms").val("");
+				$("#dvExcel table tr").show();
+			});
+						
+			showTab(1);
+			Math.seedrandom();
+		});
+
+		var activeTab = 1;
+		
+		var tabStatus = {
+			"1" : { status: "init", assignment: 0 },
+			"2" : { status: "init", assignment: 0 },
+			"3" : { status: "init", assignment: 0 }
+		};
+		
+		var tabResults = {
+			"1" : { total : 0, correct : 0, errors : []},
+			"2" : { total : 0, correct : 0, errors : []},
+			"3" : { total : 0, correct : 0, errors : []}
+		};
+		
+		function showTab(index) {
+			activeTab = index;
+			$('.tab').removeClass('active');
+			$('#tab-' + index).addClass('active');
+			$('.tab-pane').removeClass('active');
+			$('#tab-pane-' + index).addClass('active');
+			
+			if (tabStatus[index].status == "init")
+			{
+				$("#tab-pane-" + index).html($("#form-templates .start").html());
+			}
+			
+			updateScore();
+		}
+		
+		function start() {
+			console.log("Starting tab " + activeTab + " ...");
+			tabStatus[activeTab].status = "busy";
+			next();
+		}
+		
+		function next() {
+			console.log("Next exercise for tab " + activeTab + " ...");
+			$("#tab-pane-" + activeTab).html($("#form-templates .question-form").html());
+			
+			var index = Math.floor(Math.random() * excelRows.length);
+			tabStatus[activeTab].assignment = index;
+
+			if (activeTab == "1")
+			{
+				var question = excelRows[index].Nederlands;
+				console.log("Question is " + question + ".");
+				$("#tab-pane-" + activeTab + " .question").html(question);
+			}
+			else if (activeTab == "2")
+			{
+				var question = excelRows[index].Grondwoord;
+				console.log("Question is " + question + ".");
+				$("#tab-pane-" + activeTab + " .question").html(question);
+			}
+			else if (activeTab == "3")
+			{
+				var question = excelRows[index].Grondwoord;
+				console.log("Question is " + question + ".");
+				$("#tab-pane-" + activeTab + " .question").html(question);
+			}
+			
+		}
+		
+		function verify() {
+			console.log("Verifying answer for tab " + activeTab + " ...");
+			tabStatus[activeTab].status = "verify";
+			var index = tabStatus[activeTab].assignment;
+			
+			var solution = "";
+			var answer = $("#tab-pane-" + activeTab + " .answer").val();
+			
+			if (activeTab == "1")
+			{
+				solution = excelRows[index].Grondwoord;
+			}
+			else if (activeTab == "2")
+			{
+				solution = excelRows[index].Genitief;
+			}
+			else if (activeTab == "3")
+			{
+				solution = excelRows[index].Nederlands;
+			}
+
+			if (solution.toLowerCase() == answer.toLowerCase()) {
+				correctAnswer();
+			}
+			else {
+				wrongAnswer(answer, solution);
+			}
+
+		}
+		
+		function correctAnswer() {
+			$("#tab-pane-" + activeTab).html($("#form-templates .correct-form").html());
+			tabResults[activeTab].total++;
+			tabResults[activeTab].correct++;
+			updateScore();
+		}
+		
+		function wrongAnswer(answer, solution) {
+			$("#tab-pane-" + activeTab).html($("#form-templates .incorrect-form").html());
+
+			tabResults[activeTab].total++;
+			tabResults[activeTab].errors.push(tabStatus[activeTab].assignment);
+			
+			$("#tab-pane-" + activeTab + " .correct-answer").html(solution);
+			$("#tab-pane-" + activeTab + " .incorrect-answer").html(answer);
+			
+			updateScore();
+		}
+		
+		function updateScore() {
+			var score =  tabResults[activeTab].correct  + " / " + tabResults[activeTab].total;
+			if (tabResults[activeTab].total > 0) 
+			{
+				var stars = ""; 
+				var val = Math.floor(tabResults[activeTab].correct * 5 / tabResults[activeTab].total);
+				for (var x = 0; x < 5; ++x)
+				{
+					if (x < val) {
+						stars = stars + '<i class="fa fa-star"></i>'
+					}
+					else {
+						stars = stars + '<i class="fa fa-star-o"></i>'
+					}
+				}
+				$("#score").html(stars + " " + score);
+			}
+			else {
+				$("#score").html("");
+			}
+		}
+		</script>
+
+		<style>
+		body, table { font-family: 'Segoe UI Light'}
+		
+		#fileLoader { background-color: #AAA; padding: 20px; }
+		#fileLoader, #quizPane { min-width: 640px; margin:0 auto; }
+		#fileLoader, #quizPane { display: none; }
+		#fileLoader.active, #quizPane.active { display: table; }
+		
+		#score { float: left; }
+		#result { float: right; text-align: right; }
+		
+		.tab { background-color: #555; color: white; padding: 10px; cursor: pointer; border-radius: 5px 5px 0 0; margin-right: 5px; }
+		.tab:hover { background-color: #888; }
+		.tab.active { background-color: #AAA; color: auto; padding: 10px; }
+		.tab-pane { background-color: #AAA; display: none; padding: 10px; }
+		.tab-pane.active { display: block; }
+		
+		.search-bar { padding: 0 0 15px 0; }
+		#dvExcel table { min-width: 600px; }
+		#dvExcel td { min-width: 200px; }
+		#dvExcel table th { font-weight: bold; padding: 4px; }
+		#dvExcel table td { padding: 4px; }
+		
+		.control { font-size: 12pt; margin: 5px 0; }
+		
+		.question, .correct-answer { font-size: 16pt; font-style: italic; font-weight: bold; padding: 0 10pt; }  
+		.feedback { font-size: 14pt; }
+		.incorrect-answer { text-decoration: line-through; }
+		</style>
+	
+	</head>
+
+	<body>
+		<div id="fileLoader" class="active">
+			Laad eerst een excel bestand op.
+			<br/><br/>
+			<input type="file" id="fileUpload" class="control" />
+			<br/>
+			<input type="button" id="upload" value="Opladen" class="control" />
+		</div>
+		
+		<div id="quizPane">
+			<table cellspacing="0" cellpadding="0">
+				<tr>
+					<td><div class="tab active" id="tab-1" onclick="showTab('1')">Nederlands <i class="fa fa-long-arrow-right"></i> Latijn</div></td>
+					<td><div class="tab" id="tab-2" onclick="showTab('2')">Grondwoord <i class="fa fa-long-arrow-right"></i> Genitief</div></td>
+					<td><div class="tab" id="tab-3" onclick="showTab('3')">Grondwoord <i class="fa fa-long-arrow-right"></i> Nederlands</div></td>		
+					<td><div class="tab" id="tab-4" onclick="showTab('4')"><i class="fa fa-search"></i>&nbsp;&nbsp;Zoeken</td>		
+				</tr>
+			</table>
+			<div class="tab-pane active" id="tab-pane-1">
+			</div>
+			<div class="tab-pane" id="tab-pane-2">
+			</div>
+			<div class="tab-pane" id="tab-pane-3">
+			</div>
+			<div class="tab-pane" id="tab-pane-4">
+				<div class="search-bar">
+					<input class="control" type="text" id="search-terms" size="25"></input>
+					<input class="control" type="button" id="search" value="Zoeken" />
+					<input class="control" type="button" id="clear" value="Wissen" />
+				</div>
+				<div id="dvExcel"></div>
+			</div>
+			<div id="score">
+			
+			</div>
+			<div id="result"></div>
+		</div>
+
+		
+		<div id="form-templates" style="display:none">
+			<div class="start">
+				<div>Klik op start om te beginnen.</div>
+				<br/>
+				<input class="control" type="button" class="start" onclick="start()" value="Start" />
+				<br/>
+			</div>
+			
+			<div class="question-form">
+				<div class="question"></div>
+				<br/>
+				<input class="answer control" type="text" size="25" placeholder="typ hier je antwoord"></input>
+				<br/>
+				<input class="verify control" type="button" value="Verifi&euml;ren" onclick="verify()" />				
+			</div>
+
+			<div class="correct-form">
+				<div class="feedback">
+				<i class="fa fa-thumbs-o-up"></i> Correct! 
+				</div>
+				<br/>
+				<input class="control" type="button" class="next" value="Volgende" onclick="next()"/>
+			</div>
+
+			<div class="incorrect-form">
+				<div class="feedback">
+				<i class="fa fa-meh-o"></i> Oeps! 
+				<br/>
+				<div class="incorrect-answer"></div>
+				<br/>
+				Het juiste antwoord is 
+				<div class="correct-answer"></div>
+				</div>
+				<br/>
+				<input class="control" type="button" class="next" value="Volgende" onclick="next()"/>
+			</div>
+
+		</div>
+
+		
+	</body>
+</html>
